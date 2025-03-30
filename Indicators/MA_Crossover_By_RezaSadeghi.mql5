@@ -1,0 +1,164 @@
+﻿//+------------------------------------------------------------------+
+//|                                                      CrossMA.mq5 |
+//|                        Copyright 2023, MetaQuotes Software Corp. |
+//|                                             https://www.meta.com |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2023, MetaQuotes Software Corp."
+#property link      "https://www.meta.com"
+#property version   "1.00"
+#property indicator_chart_window
+#property indicator_buffers 4
+#property indicator_plots   4
+//--- plot MA1
+#property indicator_label1  "MA1"
+#property indicator_type1   DRAW_LINE
+#property indicator_color1  clrDodgerBlue
+#property indicator_style1  STYLE_SOLID
+#property indicator_width1  1
+//--- plot MA2
+#property indicator_label2  "MA2"
+#property indicator_type2   DRAW_LINE
+#property indicator_color2  clrOrange
+#property indicator_style2  STYLE_SOLID
+#property indicator_width2  1
+//--- plot UpCross
+#property indicator_label3  "UpCross"
+#property indicator_type3   DRAW_ARROW
+#property indicator_color3  clrGreen
+#property indicator_style3  STYLE_SOLID
+#property indicator_width3  2
+//--- plot DnCross
+#property indicator_label4  "DnCross"
+#property indicator_type4   DRAW_ARROW
+#property indicator_color4  clrRed
+#property indicator_style4  STYLE_SOLID
+#property indicator_width4  2
+
+//--- input parameters
+input int                MA1_Period=10;           // دوره MA اول
+input int                MA1_Shift=0;             // شیفت MA اول
+input ENUM_MA_METHOD     MA1_Method=MODE_SMA;     // روش MA اول
+input ENUM_APPLIED_PRICE MA1_Applied=PRICE_CLOSE; // قیمت اعمالی MA اول
+
+input int                MA2_Period=20;           // دوره MA دوم
+input int                MA2_Shift=0;             // شیفت MA دوم
+input ENUM_MA_METHOD     MA2_Method=MODE_SMA;     // روش MA دوم
+input ENUM_APPLIED_PRICE MA2_Applied=PRICE_CLOSE; // قیمت اعمالی MA دوم
+
+input bool               EnableAlerts=true;       // فعال کردن آلارم‌ها
+input bool               AlertOnNewBar=true;      // آلارم فقط روی کندل جدید
+
+//--- indicator buffers
+double         MA1Buffer[];
+double         MA2Buffer[];
+double         UpCrossBuffer[];
+double         DnCrossBuffer[];
+
+int            MA1Handle;
+int            MA2Handle;
+bool           NewBarFlag=false;
+datetime       LastAlertTime=0;
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+//--- indicator buffers mapping
+   SetIndexBuffer(0, MA1Buffer, INDICATOR_DATA);
+   SetIndexBuffer(1, MA2Buffer, INDICATOR_DATA);
+   SetIndexBuffer(2, UpCrossBuffer, INDICATOR_DATA);
+   SetIndexBuffer(3, DnCrossBuffer, INDICATOR_DATA);
+   
+//--- تنظیمات نمایش کراس‌ها
+   PlotIndexSetInteger(2, PLOT_ARROW, 233);  // فلش صعودی
+   PlotIndexSetInteger(3, PLOT_ARROW, 234);  // فلش نزولی
+   
+//--- ایجاد هندل‌های اندیکاتور
+   MA1Handle=iMA(NULL, 0, MA1_Period, MA1_Shift, MA1_Method, MA1_Applied);
+   MA2Handle=iMA(NULL, 0, MA2_Period, MA2_Shift, MA2_Method, MA2_Applied);
+   
+   if(MA1Handle==INVALID_HANDLE || MA2Handle==INVALID_HANDLE)
+     {
+      Print("خطا در ایجاد هندل‌های اندیکاتور");
+      return(INIT_FAILED);
+     }
+     
+//--- مقداردهی اولیه آرایه‌ها
+   ArrayInitialize(UpCrossBuffer, EMPTY_VALUE);
+   ArrayInitialize(DnCrossBuffer, EMPTY_VALUE);
+   
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+  {
+//--- اگر داده‌ها کافی نیستند
+   if(rates_total < MathMax(MA1_Period, MA2_Period))
+      return(0);
+
+//--- بررسی کندل جدید
+   if(prev_calculated==0)
+      NewBarFlag=true;
+   else
+      NewBarFlag=(time[0]!=LastAlertTime);
+
+//--- دریافت داده‌های MA
+   if(CopyBuffer(MA1Handle, 0, 0, rates_total, MA1Buffer)<=0)
+      return(0);
+   if(CopyBuffer(MA2Handle, 0, 0, rates_total, MA2Buffer)<=0)
+      return(0);
+
+//--- یافتن کراس‌ها
+   int start;
+   if(prev_calculated==0)
+      start=MathMax(MA1_Period, MA2_Period);
+   else
+      start=prev_calculated-1;
+      
+   for(int i=start; i<rates_total && !IsStopped(); i++)
+     {
+      // پاک کردن مقادیر قبلی
+      UpCrossBuffer[i]=EMPTY_VALUE;
+      DnCrossBuffer[i]=EMPTY_VALUE;
+      
+      // تشخیص کراس
+      if(i>0)
+        {
+         // کراس صعودی (MA1 از پایین به بالا از MA2 عبور کند)
+         if(MA1Buffer[i]>MA2Buffer[i] && MA1Buffer[i-1]<=MA2Buffer[i-1])
+           {
+            UpCrossBuffer[i]=high[i]; // فلش روی high کندل
+            if((i==rates_total-1 || NewBarFlag) && EnableAlerts && (!AlertOnNewBar || (AlertOnNewBar && time[i]>LastAlertTime)))
+              {
+               Alert("کراس صعودی در ", Symbol(), " ", EnumToString(_Period), " - زمان: ", TimeToString(time[i]));
+               LastAlertTime=time[i];
+              }
+           }
+         // کراس نزولی (MA1 از بالا به پایین از MA2 عبور کند)
+         else if(MA1Buffer[i]<MA2Buffer[i] && MA1Buffer[i-1]>=MA2Buffer[i-1])
+           {
+            DnCrossBuffer[i]=low[i]; // فلش روی low کندل
+            if((i==rates_total-1 || NewBarFlag) && EnableAlerts && (!AlertOnNewBar || (AlertOnNewBar && time[i]>LastAlertTime)))
+              {
+               Alert("کراس نزولی در ", Symbol(), " ", EnumToString(_Period), " - زمان: ", TimeToString(time[i]));
+               LastAlertTime=time[i];
+              }
+           }
+        }
+     }
+
+   return(rates_total);
+  }
+//+------------------------------------------------------------------+
