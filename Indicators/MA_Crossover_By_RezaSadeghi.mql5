@@ -1,10 +1,11 @@
-﻿//+------------------------------------------------------------------+
-//|                                                      CrossMA.mq5 |
-//|                        Copyright 2023, MetaQuotes Software Corp. |
-//|                                             https://www.meta.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2023, MetaQuotes Software Corp."
-#property link      "https://www.meta.com"
+//|                                                      CrossMA.mq5 |
+//|                        Copyright 2024, Reza Sadeghi. |
+//|                   https://github.com/rezasad80/MQL4-5-Algoritmhs |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2024, Reza Sadeghi."
+#property link      "https://github.com/rezasad80/MQL4-5-Algoritmhs"
+#property version   "1.00"
 #property version   "1.00"
 #property indicator_chart_window
 #property indicator_buffers 4
